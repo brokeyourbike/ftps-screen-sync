@@ -87,23 +87,27 @@ func run() error {
 				if !ok {
 					return
 				}
-				if event.Op == fsnotify.Create {
-					if isHidden(path.Base(event.Name)) {
-						continue
-					}
-
-					fileName := fmt.Sprintf("%s.png", uuid.New().String())
-					viewUrl := path.Join(cfg.BaseUrl, fileName)
-					clipboard.Write(clipboard.FmtText, []byte(viewUrl))
-
-					go func() {
-						systray.SetTemplateIcon(CheckMarkIcon, CheckMarkIcon)
-						time.Sleep(time.Second)
-						systray.SetTemplateIcon(DefaultIcon, DefaultIcon)
-					}()
-
-					go upload(cfg, event.Name, fileName)
+				if event.Op != fsnotify.Create {
+					continue
 				}
+				if isHidden(path.Base(event.Name)) {
+					continue
+				}
+				if !isPng(path.Base(event.Name)) {
+					continue
+				}
+
+				fileName := fmt.Sprintf("%s.png", uuid.New().String())
+				viewUrl := path.Join(cfg.BaseUrl, fileName)
+				clipboard.Write(clipboard.FmtText, []byte(viewUrl))
+
+				go func() {
+					systray.SetTemplateIcon(CheckMarkIcon, CheckMarkIcon)
+					time.Sleep(time.Second)
+					systray.SetTemplateIcon(DefaultIcon, DefaultIcon)
+				}()
+
+				go upload(cfg, event.Name, fileName)
 			case err, ok := <-watcher.Errors:
 				if !ok {
 					return
@@ -161,9 +165,9 @@ func upload(cfg Config, path string, fileName string) error {
 }
 
 func isHidden(path string) bool {
-	if path[0] == 46 {
-		return true
-	}
+	return path[0] == 46
+}
 
-	return false
+func isPng(path string) bool {
+	return path[len(path)-4:] == ".png"
 }
