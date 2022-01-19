@@ -5,73 +5,132 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
+	"path"
 	"time"
 
-	"github.com/caarlos0/env/v6"
+	"github.com/fsnotify/fsnotify"
+	"github.com/getlantern/systray"
+	"github.com/google/uuid"
 	"github.com/jlaffaye/ftp"
-	"github.com/radovskyb/watcher"
+	"github.com/spf13/viper"
 	"golang.design/x/clipboard"
+
+	_ "embed"
 )
 
+//go:embed assets/icon.png
+var DefaultIcon []byte
+
+//go:embed assets/checkmark.png
+var CheckMarkIcon []byte
+
 type Config struct {
-	Host       string `env:"HOST" envDefault:""`
-	Port       string `env:"PORT" envDefault:"21"`
-	Username   string `env:"USERNAME" envDefault:""`
-	Password   string `env:"PASSWORD" envDefault:""`
-	SourcePath string `env:"SOURCE_PATH" envDefault:""`
+	Host       string
+	Port       string
+	Tls        bool
+	Username   string
+	Password   string
+	SourcePath string
+	BaseUrl    string
 }
 
 func main() {
-	if err := run(); err != nil {
-		log.Fatalf("%s\n", err)
-		os.Exit(1)
-	}
+	systray.Run(func() {
+		systray.SetTemplateIcon(DefaultIcon, DefaultIcon)
+		systray.AddSeparator()
+		quitButton := systray.AddMenuItem("Quit", "Quit the app")
+
+		go func() {
+			for {
+				select {
+				case <-quitButton.ClickedCh:
+					systray.Quit()
+					return
+				}
+			}
+		}()
+
+		if err := run(); err != nil {
+			log.Fatalf("%s\n", err)
+			os.Exit(1)
+		}
+	}, func() {})
 }
 
 func run() error {
-	cfg := Config{}
-	if err := env.Parse(&cfg); err != nil {
-		return fmt.Errorf("cannot parse config: %v", err)
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(".")
+	viper.ReadInConfig()
+
+	cfg := Config{
+		Host:       viper.GetString("host"),
+		Port:       viper.GetString("port"),
+		Tls:        viper.GetBool("tls"),
+		Username:   viper.GetString("username"),
+		Password:   viper.GetString("password"),
+		SourcePath: viper.GetString("source_path"),
+		BaseUrl:    viper.GetString("base_url"),
 	}
 
-	// Instantiate watcher and only watch for CREATE events
-	w := watcher.New()
-	w.FilterOps(watcher.Create)
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return err
+	}
+	defer watcher.Close()
 
+	done := make(chan bool)
 	go func() {
 		for {
 			select {
-			case event := <-w.Event:
-				fmt.Println(event) // Print the event's info.
-				go upload(cfg, event.Path)
-				clipboard.Write(clipboard.FmtText, []byte(event.Path))
-			case err := <-w.Error:
-				log.Fatalln(err)
-			case <-w.Closed:
-				return
+			case event, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+				if event.Op == fsnotify.Create {
+					if isHidden(path.Base(event.Name)) {
+						continue
+					}
+
+					fileName := fmt.Sprintf("%s.png", uuid.New().String())
+					viewUrl := path.Join(cfg.BaseUrl, fileName)
+					clipboard.Write(clipboard.FmtText, []byte(viewUrl))
+
+					go func() {
+						systray.SetTemplateIcon(CheckMarkIcon, CheckMarkIcon)
+						time.Sleep(time.Second)
+						systray.SetTemplateIcon(DefaultIcon, DefaultIcon)
+					}()
+
+					go upload(cfg, event.Name, fileName)
+				}
+			case err, ok := <-watcher.Errors:
+				if !ok {
+					return
+				}
+				log.Println("error:", err)
 			}
 		}
 	}()
 
-	// Watch test_folder recursively for changes
-	if err := w.AddRecursive(cfg.SourcePath); err != nil {
-		log.Fatalln(err)
+	err = watcher.Add(cfg.SourcePath)
+	if err != nil {
+		return err
 	}
-
-	// Start the watching process
-	log.Printf("Watching: %v\n", cfg.SourcePath)
-	if err := w.Start(time.Duration(time.Millisecond * 100)); err != nil {
-		log.Fatalln(err)
-	}
+	<-done
 
 	return nil
 }
 
-func upload(cfg Config, path string) error {
+func upload(cfg Config, path string, fileName string) error {
 	ftpOptions := []ftp.DialOption{
 		ftp.DialWithTimeout(5 * time.Second),
-		ftp.DialWithExplicitTLS(&tls.Config{}),
+	}
+
+	if cfg.Tls {
+		ftpOptions = append(ftpOptions, ftp.DialWithExplicitTLS(&tls.Config{
+			InsecureSkipVerify: true,
+		}))
 	}
 
 	c, err := ftp.Dial(fmt.Sprintf("%s:%s", cfg.Host, cfg.Port), ftpOptions...)
@@ -89,7 +148,7 @@ func upload(cfg Config, path string) error {
 		return fmt.Errorf("cannot open file %s: %v", path, err)
 	}
 
-	err = c.Stor(filepath.Base(path), file)
+	err = c.Stor(fileName, file)
 	if err != nil {
 		return err
 	}
@@ -99,4 +158,12 @@ func upload(cfg Config, path string) error {
 	}
 
 	return nil
+}
+
+func isHidden(path string) bool {
+	if path[0] == 46 {
+		return true
+	}
+
+	return false
 }

@@ -1,0 +1,7 @@
+host: 8.8.8.8
+port: 21
+tls: false
+username: john
+password: doe123
+source_path: /home
+base_url: example.com
