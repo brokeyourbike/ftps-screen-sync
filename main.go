@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -169,5 +170,5 @@ func isHidden(path string) bool {
 }
 
 func isPng(path string) bool {
-	return path[len(path)-4:] == ".png"
+	return filepath.Ext(path) == ".png"
 }
