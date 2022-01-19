@@ -60,7 +60,6 @@ func main() {
 }
 
 func run() (<-chan bool, error) {
-
 	cfg := newConfig()
 
 	watcher, err := fsnotify.NewWatcher()
@@ -70,38 +69,7 @@ func run() (<-chan bool, error) {
 	defer watcher.Close()
 
 	done := make(chan bool)
-	go func() {
-		for {
-			select {
-			case event, ok := <-watcher.Events:
-				if !ok {
-					continue
-				}
-				if event.Op != fsnotify.Create {
-					continue
-				}
-				if isHidden(path.Base(event.Name)) {
-					continue
-				}
-				if !isPng(path.Base(event.Name)) {
-					continue
-				}
-
-				go upload(cfg, event.Name)
-
-				go func() {
-					systray.SetTemplateIcon(CheckMarkIcon, CheckMarkIcon)
-					time.Sleep(time.Second)
-					systray.SetTemplateIcon(DefaultIcon, DefaultIcon)
-				}()
-			case err, ok := <-watcher.Errors:
-				if !ok {
-					continue
-				}
-				log.Println("error:", err)
-			}
-		}
-	}()
+	go watch(cfg, watcher)
 
 	err = watcher.Add(cfg.SourcePath)
 	if err != nil {
@@ -109,6 +77,39 @@ func run() (<-chan bool, error) {
 	}
 
 	return done, nil
+}
+
+func watch(cfg Config, watcher *fsnotify.Watcher) {
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				continue
+			}
+			if event.Op != fsnotify.Create {
+				continue
+			}
+			if isHidden(path.Base(event.Name)) {
+				continue
+			}
+			if !isPng(path.Base(event.Name)) {
+				continue
+			}
+
+			go upload(cfg, event.Name)
+
+			go func() {
+				systray.SetTemplateIcon(CheckMarkIcon, CheckMarkIcon)
+				time.Sleep(time.Second)
+				systray.SetTemplateIcon(DefaultIcon, DefaultIcon)
+			}()
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				continue
+			}
+			log.Println("error:", err)
+		}
+	}
 }
 
 func upload(cfg Config, sourcePath string) error {
