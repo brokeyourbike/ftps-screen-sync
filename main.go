@@ -114,52 +114,6 @@ func run() error {
 	return nil
 }
 
-func upload(cfg Config, path string, fileName string) error {
-	ftpOptions := []ftp.DialOption{
-		ftp.DialWithTimeout(5 * time.Second),
-	}
-
-	if cfg.Tls {
-		ftpOptions = append(ftpOptions, ftp.DialWithExplicitTLS(&tls.Config{
-			InsecureSkipVerify: true,
-		}))
-	}
-
-	c, err := ftp.Dial(fmt.Sprintf("%s:%s", cfg.Host, cfg.Port), ftpOptions...)
-	if err != nil {
-		return fmt.Errorf("cannot dial FTP: %v", err)
-	}
-
-	err = c.Login(cfg.Username, cfg.Password)
-	if err != nil {
-		return fmt.Errorf("cannot connect to FTP: %v", err)
-	}
-
-	file, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("cannot open file %s: %v", path, err)
-	}
-
-	err = c.Stor(fileName, file)
-	if err != nil {
-		return err
-	}
-
-	if err := c.Quit(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func isHidden(path string) bool {
-	return path[0] == 46
-}
-
-func isPng(path string) bool {
-	return filepath.Ext(path) == ".png"
-}
-
 func newConfig() Config {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -177,4 +131,59 @@ func newConfig() Config {
 	}
 
 	return cfg
+}
+
+func newConn(cfg Config) (*ftp.ServerConn, error) {
+	ftpOptions := []ftp.DialOption{
+		ftp.DialWithTimeout(5 * time.Second),
+	}
+
+	if cfg.Tls {
+		ftpOptions = append(ftpOptions, ftp.DialWithExplicitTLS(&tls.Config{
+			InsecureSkipVerify: true,
+		}))
+	}
+
+	addr := fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
+
+	c, err := ftp.Dial(addr, ftpOptions...)
+	if err != nil {
+		return nil, fmt.Errorf("cannot dial FTP server %s: %v", addr, err)
+	}
+
+	err = c.Login(cfg.Username, cfg.Password)
+	if err != nil {
+		return nil, fmt.Errorf("cannot connect to FTP: %v", err)
+	}
+
+	return c, nil
+}
+
+func upload(cfg Config, path string, fileName string) error {
+	c, err := newConn(cfg)
+	if err != nil {
+		return err
+	}
+
+	defer c.Quit()
+
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("cannot open file %s: %v", path, err)
+	}
+
+	err = c.Stor(fileName, file)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func isHidden(path string) bool {
+	return path[0] == 46
+}
+
+func isPng(path string) bool {
+	return filepath.Ext(path) == ".png"
 }
