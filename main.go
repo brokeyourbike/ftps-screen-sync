@@ -59,20 +59,7 @@ func main() {
 }
 
 func run() error {
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
-	viper.ReadInConfig()
-
-	cfg := Config{
-		Host:       viper.GetString("host"),
-		Port:       viper.GetString("port"),
-		Tls:        viper.GetBool("tls"),
-		Username:   viper.GetString("username"),
-		Password:   viper.GetString("password"),
-		SourcePath: viper.GetString("source_path"),
-		BaseUrl:    viper.GetString("base_url"),
-	}
+	cfg := newConfig()
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -171,4 +158,23 @@ func isHidden(path string) bool {
 
 func isPng(path string) bool {
 	return filepath.Ext(path) == ".png"
+}
+
+func newConfig() Config {
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(".")
+	viper.ReadInConfig()
+
+	cfg := Config{
+		Host:       viper.GetString("host"),
+		Port:       viper.GetString("port"),
+		Tls:        viper.GetBool("tls"),
+		Username:   viper.GetString("username"),
+		Password:   viper.GetString("password"),
+		SourcePath: viper.GetString("source_path"),
+		BaseUrl:    viper.GetString("base_url"),
+	}
+
+	return cfg
 }
