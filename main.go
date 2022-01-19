@@ -43,27 +43,29 @@ func main() {
 
 		go func() {
 			for {
-				select {
-				case <-quitButton.ClickedCh:
-					systray.Quit()
-					return
-				}
+				<-quitButton.ClickedCh
+				systray.Quit()
 			}
 		}()
 
-		if err := run(); err != nil {
+		done, err := run()
+		if err != nil {
 			log.Fatalf("%s\n", err)
-			os.Exit(1)
+			quitButton.ClickedCh <- struct{}{}
 		}
+
+		<-done
+		quitButton.ClickedCh <- struct{}{}
 	}, func() {})
 }
 
-func run() error {
+func run() (<-chan bool, error) {
+
 	cfg := newConfig()
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer watcher.Close()
 
@@ -73,7 +75,7 @@ func run() error {
 			select {
 			case event, ok := <-watcher.Events:
 				if !ok {
-					return
+					continue
 				}
 				if event.Op != fsnotify.Create {
 					continue
@@ -85,20 +87,16 @@ func run() error {
 					continue
 				}
 
-				fileName := fmt.Sprintf("%s.png", uuid.New().String())
-				viewUrl := path.Join(cfg.BaseUrl, fileName)
-				clipboard.Write(clipboard.FmtText, []byte(viewUrl))
+				go upload(cfg, event.Name)
 
 				go func() {
 					systray.SetTemplateIcon(CheckMarkIcon, CheckMarkIcon)
 					time.Sleep(time.Second)
 					systray.SetTemplateIcon(DefaultIcon, DefaultIcon)
 				}()
-
-				go upload(cfg, event.Name, fileName)
 			case err, ok := <-watcher.Errors:
 				if !ok {
-					return
+					continue
 				}
 				log.Println("error:", err)
 			}
@@ -107,11 +105,33 @@ func run() error {
 
 	err = watcher.Add(cfg.SourcePath)
 	if err != nil {
+		return done, err
+	}
+
+	return done, nil
+}
+
+func upload(cfg Config, sourcePath string) error {
+	fileName := fmt.Sprintf("%s.png", uuid.New().String())
+
+	go func() {
+		viewUrl := path.Join(cfg.BaseUrl, fileName)
+		clipboard.Write(clipboard.FmtText, []byte(viewUrl))
+	}()
+
+	conn, err := newConn(cfg)
+	if err != nil {
 		return err
 	}
-	<-done
 
-	return nil
+	defer conn.Quit()
+
+	file, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("cannot open file %s: %v", sourcePath, err)
+	}
+
+	return conn.Stor(fileName, file)
 }
 
 func newConfig() Config {
@@ -157,27 +177,6 @@ func newConn(cfg Config) (*ftp.ServerConn, error) {
 	}
 
 	return c, nil
-}
-
-func upload(cfg Config, path string, fileName string) error {
-	c, err := newConn(cfg)
-	if err != nil {
-		return err
-	}
-
-	defer c.Quit()
-
-	file, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("cannot open file %s: %v", path, err)
-	}
-
-	err = c.Stor(fileName, file)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func isHidden(path string) bool {
