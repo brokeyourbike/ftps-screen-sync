@@ -1,5 +1,12 @@
 # Changelog
 
+### [0.1.1](https://www.github.com/brokeyourbike/ftps-screen-sync/compare/v0.1.0...v0.1.1) (2022-05-31)
+
+
+### Bug Fixes
+
+* update dependencies ([a1db732](https://www.github.com/brokeyourbike/ftps-screen-sync/commit/a1db7329f87be043b9a32b80e6e4ea30e1f65879))
+
 ## 0.1.0 (2022-01-19)
 
 
