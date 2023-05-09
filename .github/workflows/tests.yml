@@ -14,20 +14,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-
-    - name: Set up Go
-      uses: actions/setup-go@v2
+    - uses: actions/setup-go@v4
       with:
         go-version: 1.17
+    - run: go build -v
+    - run: go test -race -covermode=atomic -shuffle=on -coverprofile=coverage.out -v
 
-    - name: Build
-      run: go build -v
-
-    - name: Test
-      run: go test -race -covermode=atomic -shuffle=on -coverprofile=coverage.out -v
-
-    - name: Upload coverage to codeclimate
-      uses: paambaati/codeclimate-action@v3.0.0
+    - uses: paambaati/codeclimate-action@v4
       env:
         CC_TEST_REPORTER_ID: ${{ secrets.CODECLIMATE_TOKEN }}
       with:
