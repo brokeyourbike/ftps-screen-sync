@@ -9,3 +9,9 @@ Sync files to the FTPS server, and copy the link to the clipboard.
 ## Assets
 
 Icons from [Ionicons icon pack](https://www.iconfinder.com/iconsets/ionicons) licensed under the [MIT License](https://opensource.org/licenses/MIT)
+
+## Authors
+- [Ivan Stasiuk](https://github.com/brokeyourbike) | [Twitter](https://twitter.com/brokeyourbike) | [LinkedIn](https://www.linkedin.com/in/brokeyourbike) | [stasi.uk](https://stasi.uk)
+
+## License
+[MPL-2.0 License](https://github.com/glocurrency/ftps-screen-sync/blob/main/LICENSE)
